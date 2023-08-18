@@ -12,10 +12,10 @@ table = boto3.resource('dynamodb').Table(os.environ["DICE_TABLE"])
 def get_response(event):
     return {
         "statusCode": 200,
-        "body": json.dumps(query_last_10_rols_from_table(event["queryStringParameters"]["name"])["Items"], default=str)
+        "body": json.dumps(query_last_10_rolls_from_table(event["queryStringParameters"]["name"])["Items"], default=str)
     }
 
-def query_last_10_rols_from_table(name):
+def query_last_10_rolls_from_table(name):
     response = table.query(
         Limit=10,
         KeyConditionExpression=Key('name').eq(name))
