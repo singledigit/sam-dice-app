@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Dice Roll Micro Service
+
+Resources:
+  DiceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+  DiceApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Models:
+        Roll:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+              maxLength: 30
+              minLength: 2
+
+  DiceRollFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/roll/
+      Handler: app.lambda_handler
+      Runtime: python3.11
+      Architectures:
+        - arm64
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DiceTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref DiceTable
+      Environment:
+        Variables:
+          CHANCE_OF_FAILURE: 20
+          POWERTOOLS_SERVICE_NAME: DiceRoller
+          LOG_LEVEL: INFO
+          DICE_TABLE: !Ref DiceTable
+      Layers:
+        - !Ref DiceDependencyLayer
+      Events:
+        PostEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DiceApi
+            Path: /
+            Method: POST
+            RequestModel:
+              Model: Roll
+              Required: true
+              ValidateBody: true
+        GetEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DiceApi
+            Path: /
+            Method: GET
+            RequestParameters:
+              - method.request.querystring.name:
+                  Required: true
+                  Caching: false
+            RequestModel:
+              Model: Roll
+              Required: true
+              ValidateParameters: true
+
+  DiceDependencyLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleArchitectures:
+        - arm64
+      CompatibleRuntimes:
+        - python3.11
+      ContentUri: src/layer/
+      Description: Dependencies for dice roll app
+      LayerName: DiceRollDependencies
+    Metadata:
+      BuildMethod: python3.11
+
+Outputs:
+  DiceApiUrl:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${DiceApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
